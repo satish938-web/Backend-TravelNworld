@@ -3,9 +3,15 @@ import allowedOrigins from "./allowedOrigins.js";
 const corsOptions = {
   origin: (origin, callback) => {
     // allow requests with no origin (like mobile apps or curl requests)
-    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+    if (!origin) return callback(null, true);
+    
+    // Normalize origin: remove trailing slash
+    const normalizedOrigin = origin.replace(/\/$/, "");
+    
+    if (allowedOrigins.includes(normalizedOrigin)) {
       callback(null, true);
     } else {
+      console.log("CORS Rejected Origin:", origin);
       callback(new Error("Not allowed by CORS"));
     }
   },
