@@ -1,4 +1,5 @@
 import { ROLES } from "../utils/constant.js";
+import { OAuth2Client } from "google-auth-library";
 import * as authService from "../services/authService.js";
 import * as agentService from "../services/agentService.js";
 import Agent from "../models/agent.js";
@@ -204,4 +205,62 @@ export const updateProfile = async (req, res) => {
   }
 };
 
-// ... other handlers if needed ...
+
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+
+export const googleLogin = async (req, res) => {
+  try {
+    const { token } = req.body;
+    if (!token) {
+      return res.status(400).json({ message: "Token is required" });
+    }
+
+    const ticket = await googleClient.verifyIdToken({
+      idToken: token,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+
+    const { email, given_name, family_name, picture } = ticket.getPayload();
+    const normalizedEmail = email.toLowerCase().trim();
+
+    let agent = await Agent.findOne({ email: normalizedEmail });
+
+    if (!agent) {
+      // Create new agent if not found
+      agent = new Agent({
+        firstName: given_name || "",
+        lastName: family_name || "",
+        email: normalizedEmail,
+        role: ROLES.AGENT,
+        isActive: true,
+        isVerified: false,
+        photo: picture || "",
+      });
+      await agent.save();
+    }
+
+    const accessToken = generateAccessToken({
+      id: agent._id,
+      email: agent.email,
+      role: agent.role,
+    }, true); // Remember me true for Google login
+
+    return res.status(200).json({
+      success: true,
+      accessToken,
+      user: {
+        _id: agent._id,
+        email: agent.email,
+        role: agent.role,
+        firstName: agent.firstName,
+        lastName: agent.lastName,
+        phone: agent.phone,
+        photo: agent.photo,
+        isProfileComplete: agent.isProfileComplete ?? false,
+      },
+    });
+  } catch (error) {
+    console.error("Google Login Error:", error);
+    res.status(400).json({ message: "Invalid Google Token or Server Error" });
+  }
+};

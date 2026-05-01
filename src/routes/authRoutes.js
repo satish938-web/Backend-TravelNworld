@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { login, register, getProfile, updateProfile, verifyOTP} from "../controllers/authController.js";
+import { login, register, getProfile, updateProfile, verifyOTP, googleLogin} from "../controllers/authController.js";
 import { validateRegister } from "../middlewares/validators/authValidator.js";
 import { validateRequest } from "../middlewares/validators/validationErrorHandler.js";
 import { check } from "express-validator";
@@ -12,6 +12,7 @@ const router = Router();
 router.post("/login", login);
 router.post("/register", register);
 router.post("/verify-otp", verifyOTP);
+router.post("/google-login", googleLogin);
 
 // Get logged-in user info
 router.get("/me", requireAuth, async (req, res) => {
