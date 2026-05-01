@@ -7,6 +7,7 @@ import {
   deleteAgent,
   toggleAgentStatus,
   getVerifiedAgents,
+  getPublicAgents,
   submitReview,
   addPublicPhoto,
   getAllReviews,
@@ -40,6 +41,9 @@ const validateReview = [
 
 // Get verified agents for homepage slider
 router.get("/verified", getVerifiedAgents);
+
+// Get all active agents for public list
+router.get("/public", getPublicAgents);
 
 // Get single agent profile for details page
 router.get("/public/:agentId", getAgentById);

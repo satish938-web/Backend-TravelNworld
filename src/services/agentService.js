@@ -40,12 +40,21 @@ export const getAllAgents = async (page = 1, limit = 10, role, search = "") => {
 };
 
 /**
- * Get only verified agents for public display
+ * Get all active agents for public display
  */
 export const getVerifiedAgents = async () => {
   return await Agent.find({ isVerified: true, isActive: true })
     .select("-password -registeredEmail -isActive")
     .sort({ rating: -1, createdAt: -1 });
+};
+
+/**
+ * Get all active agents for public display
+ */
+export const getPublicAgents = async () => {
+  return await Agent.find({ isActive: true })
+    .select("-password -registeredEmail -isActive")
+    .sort({ isVerified: -1, rating: -1, createdAt: -1 });
 };
 
 /**

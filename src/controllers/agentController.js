@@ -50,6 +50,26 @@ export const getVerifiedAgents = async (req, res, next) => {
 };
 
 /**
+ * Get all active agents (Public)
+ */
+export const getPublicAgents = async (req, res, next) => {
+  try {
+    const agents = await agentService.getPublicAgents();
+    
+    const signedAgents = await Promise.all(
+      agents.map((agent) => signAgent(agent))
+    );
+
+    res.status(200).json({
+      success: true,
+      data: signedAgents,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * Get agent details by ID (Public)
  */
 export const getAgentById = async (req, res, next) => {
