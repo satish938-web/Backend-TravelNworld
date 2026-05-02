@@ -52,9 +52,16 @@ export const getVerifiedAgents = async () => {
  * Get all active agents for public display
  */
 export const getPublicAgents = async () => {
-  return await Agent.find({ isActive: true })
+  return await Agent.find({ isActive: true, isVerified: false })
     .select("-password -registeredEmail -isActive")
-    .sort({ isVerified: -1, rating: -1, createdAt: -1 });
+    .sort({ rating: -1, createdAt: -1 });
+};
+
+/**
+ * Get agent profile by email
+ */
+export const getAgentByEmail = async (email) => {
+  return await Agent.findOne({ email });
 };
 
 /**
@@ -67,9 +74,28 @@ export const getAgentById = async (id) => {
   if (isObjectId) {
     agent = await Agent.findById(id);
   } else {
-    // Search by company name (slug) if not an ObjectId
-    const companyName = id.replace(/-/g, " ");
-    agent = await Agent.findOne({ company: { $regex: new RegExp(`^${companyName}$`, "i") } });
+    // Search by company name (slug) or firstName/lastName if not an ObjectId
+    const companyName = id.replace(/-/g, " ").trim();
+    const nameParts = companyName.split(" ");
+    
+    agent = await Agent.findOne({
+      $or: [
+        { company: { $regex: new RegExp(`^${companyName}$`, "i") } },
+        {
+          $and: [
+            { firstName: { $regex: new RegExp(`^${nameParts[0]}$`, "i") } },
+            { lastName: { $regex: new RegExp(`^${nameParts.slice(1).join(" ")}$`, "i") } }
+          ]
+        }
+      ]
+    });
+
+    // Final fallback: Fuzzy match on company name (if first word matches)
+    if (!agent && nameParts[0].length > 3) {
+      agent = await Agent.findOne({
+        company: { $regex: new RegExp(nameParts[0], "i") }
+      });
+    }
   }
 
   if (!agent) throw new AppError("Agent profile not found", 404);
@@ -246,8 +272,28 @@ export const addAgentReview = async (agentId, reviewData, user) => {
   if (isObjectId) {
     agent = await Agent.findById(agentId);
   } else {
-    const companyName = agentId.replace(/-/g, " ");
-    agent = await Agent.findOne({ company: { $regex: new RegExp(`^${companyName}$`, "i") } });
+    // Search by company name (slug) or firstName/lastName if not an ObjectId
+    const companyName = agentId.replace(/-/g, " ").trim();
+    const nameParts = companyName.split(" ");
+    
+    agent = await Agent.findOne({
+      $or: [
+        { company: { $regex: new RegExp(`^${companyName}$`, "i") } },
+        {
+          $and: [
+            { firstName: { $regex: new RegExp(`^${nameParts[0]}$`, "i") } },
+            { lastName: { $regex: new RegExp(`^${nameParts.slice(1).join(" ")}$`, "i") } }
+          ]
+        }
+      ]
+    });
+
+    // Fuzzy match on company name
+    if (!agent && nameParts[0].length > 3) {
+      agent = await Agent.findOne({
+        company: { $regex: new RegExp(nameParts[0], "i") }
+      });
+    }
   }
   
   if (!agent) throw new AppError("Agent not found", 404);

@@ -74,15 +74,15 @@ router.delete("/:agentId", requireAuth, requireRoles(ROLES.ADMIN, ROLES.SUPERADM
 // Toggle agent status (Active/Inactive)
 router.patch("/:agentId/status", requireAuth, requireRoles(ROLES.ADMIN, ROLES.SUPERADMIN), toggleAgentStatus);
 
-// ==================== REVIEW MANAGEMENT (SUPERADMIN ONLY) ====================
+// ==================== REVIEW MANAGEMENT (SUPERADMIN & AGENT) ====================
 
-// Get all reviews for moderation
-router.get("/all/reviews", requireAuth, requireRoles(ROLES.SUPERADMIN), getAllReviews);
+// Get all reviews (SuperAdmin sees all, Agent sees only theirs)
+router.get("/all/reviews", requireAuth, requireRoles(ROLES.SUPERADMIN, ROLES.AGENT), getAllReviews);
 
 // Update a specific review
-router.put("/reviews/:reviewId", requireAuth, requireRoles(ROLES.SUPERADMIN), updateReview);
+router.put("/reviews/:reviewId", requireAuth, requireRoles(ROLES.SUPERADMIN, ROLES.AGENT), updateReview);
 
 // Delete a specific review
-router.delete("/reviews/:reviewId", requireAuth, requireRoles(ROLES.SUPERADMIN), deleteReview);
+router.delete("/reviews/:reviewId", requireAuth, requireRoles(ROLES.SUPERADMIN, ROLES.AGENT), deleteReview);
 
 export default router;

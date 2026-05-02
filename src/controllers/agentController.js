@@ -3,6 +3,7 @@ import { AppError } from "../utils/errorHandler.js";
 import { getPresignedViewUrl } from "../services/s3Service.js";
 import AgentReview from "../models/AgentReview.js";
 import { signAgent, signReview } from "../utils/agentUtils.js";
+import { ROLES } from "../utils/constant.js";
 
 /**
  * Get all agents (Admin only)
@@ -217,11 +218,44 @@ export const addPublicPhoto = async (req, res, next) => {
 };
 
 /**
- * Get all reviews for moderation (SuperAdmin)
+ * Get all reviews for moderation (SuperAdmin) or reviews for the logged-in agent
  */
 export const getAllReviews = async (req, res, next) => {
   try {
-    const reviews = await AgentReview.find().populate("agentId", "company firstName lastName").sort({ createdAt: -1 });
+    let query = {};
+    
+    // If the user is an AGENT, they can only see reviews for their own profile
+    if (req.user.role === ROLES.AGENT) {
+      // Find the agent profile associated with this user's email
+      const agentProfile = await agentService.getAgentByEmail(req.user.email);
+      if (!agentProfile) throw new AppError("Agent profile not found", 404);
+      query = { agentId: agentProfile._id };
+    }
+
+    // Add Search and Date filters
+    const { search, startDate, endDate } = req.query;
+
+    if (search) {
+      query.$or = [
+        { userName: { $regex: new RegExp(search, "i") } },
+        { comment: { $regex: new RegExp(search, "i") } }
+      ];
+    }
+
+    if (startDate || endDate) {
+      query.createdAt = {};
+      if (startDate) query.createdAt.$gte = new Date(startDate);
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        query.createdAt.$lte = end;
+      }
+    }
+
+    const reviews = await AgentReview.find(query)
+      .populate("agentId", "company firstName lastName")
+      .sort({ createdAt: -1 });
+
     const signedReviews = await Promise.all(
       reviews.map((r) => signReview(r))
     );
@@ -232,15 +266,25 @@ export const getAllReviews = async (req, res, next) => {
 };
 
 /**
- * Update a specific review (SuperAdmin)
+ * Update a specific review (SuperAdmin or Agent owning the review)
  */
 export const updateReview = async (req, res, next) => {
   try {
     const { reviewId } = req.params;
-    const review = await AgentReview.findByIdAndUpdate(reviewId, req.body, { new: true });
-    if (!review) throw new AppError("Review not found", 404);
+    const review = await AgentReview.findById(reviewId);
     
-    const signedReview = await signReview(review);
+    if (!review) throw new AppError("Review not found", 404);
+
+    // Ownership check for AGENTS
+    if (req.user.role === ROLES.AGENT) {
+      const agentProfile = await agentService.getAgentByEmail(req.user.email);
+      if (!agentProfile || review.agentId.toString() !== agentProfile._id.toString()) {
+        throw new AppError("Unauthorized: You can only edit reviews for your own profile", 403);
+      }
+    }
+
+    const updatedReview = await AgentReview.findByIdAndUpdate(reviewId, req.body, { new: true });
+    const signedReview = await signReview(updatedReview);
     res.status(200).json({ success: true, message: "Review updated", data: signedReview });
   } catch (error) {
     next(error);
@@ -248,14 +292,24 @@ export const updateReview = async (req, res, next) => {
 };
 
 /**
- * Delete a specific review (SuperAdmin)
+ * Delete a specific review (SuperAdmin or Agent owning the review)
  */
 export const deleteReview = async (req, res, next) => {
   try {
     const { reviewId } = req.params;
-    const review = await AgentReview.findByIdAndDelete(reviewId);
-    if (!review) throw new AppError("Review not found", 404);
+    const review = await AgentReview.findById(reviewId);
     
+    if (!review) throw new AppError("Review not found", 404);
+
+    // Ownership check for AGENTS
+    if (req.user.role === ROLES.AGENT) {
+      const agentProfile = await agentService.getAgentByEmail(req.user.email);
+      if (!agentProfile || review.agentId.toString() !== agentProfile._id.toString()) {
+        throw new AppError("Unauthorized: You can only delete reviews for your own profile", 403);
+      }
+    }
+
+    await AgentReview.findByIdAndDelete(reviewId);
     res.status(200).json({ success: true, message: "Review deleted" });
   } catch (error) {
     next(error);

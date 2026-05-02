@@ -23,7 +23,8 @@ const sanitizeFileName = (fileName) => {
  */
 export const generatePresignedUrl = async (fileName, fileType, folder = "uploads") => {
   const sanitized = sanitizeFileName(fileName);
-  const fileKey = `${folder}/${Date.now()}-${sanitized}`;
+  const randomSuffix = Math.random().toString(36).substring(2, 8);
+  const fileKey = `${folder}/${Date.now()}-${randomSuffix}-${sanitized}`;
   
   const command = new PutObjectCommand({
     Bucket: ENV.AWS_BUCKET_NAME,
@@ -48,52 +49,53 @@ export const generatePresignedUrl = async (fileName, fileType, folder = "uploads
 export const getPresignedViewUrl = async (fileKey, expiresIn = 14400) => {
   if (!fileKey) return "";
   
-  // If the input is a full URL but NOT from our bucket (e.g., old Cloudinary links),
-  // return it as is.
-  if (fileKey.startsWith('http') && !fileKey.includes(ENV.AWS_BUCKET_NAME)) {
-    return fileKey;
-  }
-
-  // If it's a full S3 URL, we extract the path (key) from it.
-  // Otherwise, we assume it's already a key.
   let key = fileKey;
-  if (fileKey.startsWith('http')) {
+
+  // Handle full URLs (S3 or CDN)
+  if (typeof fileKey === 'string' && fileKey.startsWith('http')) {
     try {
       const url = new URL(fileKey);
-      // If it's an S3 URL like https://bucket.s3.region.amazonaws.com/key
-      // or https://s3.region.amazonaws.com/bucket/key
-      // we need the path without the leading slash.
       let pathname = url.pathname;
+      
+      // Remove leading slash
       if (pathname.startsWith('/')) {
         pathname = pathname.substring(1);
       }
       
-      // If the URL format is s3.region.amazonaws.com/bucket/key, 
-      // we need to remove the bucket name from the key.
-      if (pathname.startsWith(ENV.AWS_BUCKET_NAME + '/')) {
-        pathname = pathname.substring(ENV.AWS_BUCKET_NAME.length + 1);
+      // Remove bucket name from path if it exists (e.g. s3.amazonaws.com/bucket-name/key)
+      const bucketPrefix = `${ENV.AWS_BUCKET_NAME}/`;
+      if (pathname.startsWith(bucketPrefix)) {
+        pathname = pathname.substring(bucketPrefix.length);
       }
       
       key = pathname;
     } catch (e) {
-      // Fallback: split by .amazonaws.com/ and remove query string
-      const urlParts = fileKey.split('.amazonaws.com/');
-      if (urlParts.length > 1) {
-        key = urlParts[1].split('?')[0];
+      // Fallback for weirdly formatted URLs
+      if (fileKey.includes('.amazonaws.com/')) {
+        key = fileKey.split('.amazonaws.com/')[1].split('?')[0];
       }
     }
   }
 
+  // Ensure key doesn't have a leading slash
+  if (typeof key === 'string' && key.startsWith('/')) {
+    key = key.substring(1);
+  }
+
+  // If CDN is configured, return the clean CDN URL
+  if (ENV.CDN_DOMAIN) {
+    return `https://${ENV.CDN_DOMAIN}/${key}`;
+  }
+
+  // Fallback to signed S3 URL if no CDN is configured
   try {
     const command = new GetObjectCommand({
       Bucket: ENV.AWS_BUCKET_NAME,
       Key: key,
     });
-
-    const url = await getSignedUrl(s3Client, command, { expiresIn });
-    return url;
+    return await getSignedUrl(s3Client, command, { expiresIn });
   } catch (error) {
-    console.error("Error generating presigned view URL:", error);
-    return fileKey; // Fallback to original key/URL if signing fails
+    console.error("Error generating media URL:", error);
+    return fileKey;
   }
 };

@@ -1,4 +1,5 @@
 import { getPresignedViewUrl } from "../services/s3Service.js";
+import { ENV } from "../config/ENV.js";
 
 /**
  * Sign S3 URLs in an agent document
@@ -115,8 +116,8 @@ export function cleanS3Data(data) {
     const cleaned = { ...data };
     for (const key in cleaned) {
       if (typeof cleaned[key] === "string" && cleaned[key].startsWith("http")) {
-        // Only clean if it looks like it belongs to our S3 (optional but safer)
-        if (cleaned[key].includes("amazonaws.com")) {
+        // Only clean if it looks like it belongs to our S3 or CDN
+        if (cleaned[key].includes("amazonaws.com") || cleaned[key].includes(ENV.CDN_DOMAIN)) {
           cleaned[key] = extractKey(cleaned[key]);
         }
       } else if (cleaned[key] && typeof cleaned[key] === "object") {
@@ -126,7 +127,7 @@ export function cleanS3Data(data) {
     return cleaned;
   }
 
-  if (typeof data === "string" && data.startsWith("http") && data.includes("amazonaws.com")) {
+  if (typeof data === "string" && data.startsWith("http") && (data.includes("amazonaws.com") || data.includes(ENV.CDN_DOMAIN))) {
     return extractKey(data);
   }
 
